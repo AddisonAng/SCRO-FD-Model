@@ -1,6 +1,6 @@
-function SCRO_Full_Model_v18()
+function SCRO_Full_Model_v19()
 % =========================================================================
-% SCRO OPTIMIZATION MODEL v18 (OCTAVE COMPATIBLE)
+% SCRO OPTIMIZATION MODEL v19 (OCTAVE COMPATIBLE)
 % =========================================================================
 
     clear variables; clc; close all;
@@ -36,7 +36,6 @@ function SCRO_Full_Model_v18()
     fprintf('\n--- Phase 1: Efficiency Analysis (Fixed RR=0.60) ---\n');
     RR_fixed = 0.60;
 
-    % Range restricted to N=1 to 6
     N_range = 1:6;
 
     % Thermodynamic Minimum SEC
@@ -98,7 +97,7 @@ function SCRO_Full_Model_v18()
     legend_strings = {};
 
     % Plot Ideal
-    h_ideal = plot(results_p2.RR, results_p2.Ideal_Curve, '--k', 'LineWidth', 2);
+    h_ideal = plot(results_p2.RR, results_p2.Ideal_Curve, '--k', 'LineWidth', 1);
     legend_handles(end+1) = h_ideal;
     legend_strings{end+1} = 'Thermodynamic Limit';
 
@@ -107,24 +106,40 @@ function SCRO_Full_Model_v18()
     for k = 1:length(N_selected)
         valid = ~isnan(results_p2.Model_Curves(:, k));
         if any(valid)
+            % Determine line color
+            if N_selected(k) == 1
+                line_color = [1, 0, 0];         % Red for SSRO
+            elseif N_selected(k) == 5
+                line_color = [0.85, 0.65, 0.1]; % Darker Gold for visibility
+            else
+                line_color = colors(k,:);
+            end
+
             h = plot(results_p2.RR(valid), results_p2.Model_Curves(valid, k), '-o', ...
-                'Color', colors(k,:), 'LineWidth', 1.5, 'MarkerSize', 5);
+                'Color', line_color, 'LineWidth', 1.2, 'MarkerSize', 4);
 
             legend_handles(end+1) = h;
-            legend_strings{end+1} = sprintf('SCRO N=%d', N_selected(k));
+
+            if N_selected(k) == 1
+                legend_strings{end+1} = 'SSRO (N=1)';
+            else
+                legend_strings{end+1} = sprintf('SCRO N=%d', N_selected(k));
+            end
         end
     end
 
     xlabel('Water Recovery Ratio (RR)');
     ylabel('Specific Energy Consumption (kWh/m^3)');
-    title('Graph 1: SEC vs. Recovery Ratio (N=1 to 6)');
-
-    % Legend and Fonts
-    legend(legend_handles, legend_strings, 'Location', 'NorthWest');
+    title('SEC vs. Recovery Ratio (N=1 to 6)');
+    legend(legend_handles, legend_strings, 'Location', 'NorthWest', 'NumColumns', 2);
     grid on;
-    ylim([0.0, 5.0]);
-    xlim([0.3, 0.9]);
-    set(gca, 'FontSize', 12); % MATCHES 0D MODEL
+
+    % Axes Limits and Ticks
+    ylim([0.0, 6.0]);
+    xlim([0.3, 0.8]);
+    xticks(0.3:0.05:0.8);
+    yticks(0:1.0:6.0);
+    set(gca, 'FontSize', 12);
 
     % --- GRAPH 2: SEC vs Number of Cycles ---
     figure(2); clf; hold on; box on;
@@ -138,35 +153,31 @@ function SCRO_Full_Model_v18()
         'MarkerFaceColor', 'r');
 
     xlabel('Number of Cycles (N)');
-    ylabel('SEC (kWh/m^3)');
-    title(sprintf('Graph 2: SEC vs No.of cycles (RR=%.2f)', RR_fixed));
+    ylabel('Specific Energy Consumption (kWh/m^3)');
+    title(sprintf('SEC vs No.of cycles (RR=%.2f)', RR_fixed));
     legend([h_sec, h_min], {'SCRO SEC', 'Optimal Point'}, 'Location', 'NorthEast');
     grid on;
     xticks(results_p1.N);
-    set(gca, 'FontSize', 12); 
+    set(gca, 'FontSize', 12);
 
     % --- GRAPH 3: Second-Law Efficiency ---
     figure(3); clf; hold on; box on;
 
     valid = ~isnan(results_p1.Efficiency);
-
-    % Line plot with discrete markers
     plot(results_p1.N(valid), results_p1.Efficiency(valid), '-s', ...
-        'LineWidth', 2, 'Color', [0, 0.5, 0], ... % Dark Green
-        'MarkerSize', 8, 'MarkerFaceColor', [0.2, 0.8, 0.2]);
+        'LineWidth', 2, 'Color', [0, 0.5, 0], 'MarkerSize', 8, 'MarkerFaceColor', [0.2, 0.8, 0.2]);
 
-    % Red limit line
     line([0.5, 6.5], [100, 100], 'Color', 'r', 'LineStyle', '--', 'LineWidth', 2);
     text(1, 102, 'Max Thermodynamic Efficiency (100%)', 'Color', 'r', 'FontWeight', 'bold', 'FontSize', 10);
 
     xlabel('Number of Cycles (N)');
     ylabel('Second-Law Efficiency (%)');
-    title('Graph 3: Second-Law Efficiency vs Cycle Count');
+    title('Second-Law Efficiency vs Cycle Count');
     grid on;
     xticks(results_p1.N);
     ylim([0, 110]);
     xlim([0.5, 6.5]);
-    set(gca, 'FontSize', 12); 
+    set(gca, 'FontSize', 12);
 end
 
 % =========================================================================
@@ -181,7 +192,6 @@ function SEC = run_scro_batch(N, RR_target, feed_initial, geo, mem, sys)
 
     for cyc = 1:N
         target_ret_vol = current_feed.Vol * (1 - r_cycle);
-
         props = get_fluid_properties(current_feed.C_gL, current_feed.Temp_K);
         P_guess = (props.osmotic_pressure_bar / (1 - r_cycle)) * 1.1 + 5;
 
@@ -212,11 +222,9 @@ function SEC = run_scro_batch(N, RR_target, feed_initial, geo, mem, sys)
     end
 end
 
-% =========================================================================
-
 function [P_res, retentate] = solve_pressure(feed, target_vol, P_guess_init, geo, mem)
     P_min = 1.0;
-    P_max = 200.0;
+    P_max = 300.0;
     tol = 1e-3;
 
     P_res = NaN; retentate.Vol = NaN; retentate.C_gL = NaN; retentate.P_out = NaN;
@@ -250,99 +258,80 @@ function [P_res, retentate] = solve_pressure(feed, target_vol, P_guess_init, geo
     retentate.P_out = ret_P;
 end
 
-% =========================================================================
-
 function [vol_out, C_out, P_out, Cp_bulk_avg] = run_module_1D(feed, P_in, geo, mem)
     N_nodes = 20;
     dz = geo.L / N_nodes;
 
-    % --- Flow Initialization ---
     chan_area = geo.W * geo.H * geo.epsilon;
-    v_in = 0.15; % Inlet velocity (m/s)
-    Q = v_in * chan_area; % Volumetric Flow Rate (m^3/s)
+    v_in = 0.15;
+    Q = v_in * chan_area;
 
-    % --- Mass Balance Initialization ---
-    C = feed.C_gL;               % Bulk Salt Concentration (kg/m^3)
-    M_salt_flow = Q * C;         % Mass Flow Rate of Salt (kg/s)
-    P = P_in;                    % Hydraulic Pressure (bar)
+    C = feed.C_gL;
+    M_salt_flow = Q * C;
+    P = P_in;
 
-    total_salt_perm_kg_s = 0;    % Track total salt passing through membrane
-    total_water_perm_m3_s = 0;   % Track total water permeating
+    total_salt_perm_kg_s = 0;
+    total_water_perm_m3_s = 0;
 
     for i = 1:N_nodes
-        % 1. Fluid Properties & Hydrodynamics [Source 2, Eqs 4-7, 10-12]
         props = get_fluid_properties(C, feed.Temp_K);
         v = Q / chan_area;
         Re = (props.rho * v * geo.dh) / props.mu;
         Sc = props.mu / (props.rho * props.D);
         Sh = 0.46 * (Re * Sc)^0.36;
-        k_mt = (props.D * Sh) / geo.dh; % Mass transfer coefficient (m/s)
+        k_mt = (props.D * Sh) / geo.dh;
 
-        % 2. Water Flux Calculation (Jw)
-        % Using Solution-Diffusion with Film Theory
         pi_bulk = props.osmotic_pressure_bar;
+        Jw = 0;
+        for iter = 1:10
+             cp_factor = exp(min(5, Jw / k_mt));
+             Cm = C * cp_factor;
+             pi_m = pi_bulk * (Cm / C);
+             NDP = P - pi_m;
+             if NDP < 0; NDP = 0; end
+             Jw_new = mem.A * NDP * 1e5;
+             if abs(Jw_new - Jw) < 1e-7
+                 Jw = Jw_new;
+                 break;
+             end
+             Jw = 0.5*Jw + 0.5*Jw_new;
+        end
 
-        % Estimate Cm (Concentration at membrane wall) using CP factor
-        % Cm = C_bulk * exp(Jw/k). Since Jw is unknown, we iterate or approx.
-        % Approx: Use P - pi_bulk first to estimate Jw, then refine.
-        Jw_est = mem.A * (P - pi_bulk) * 1e5;
-        if Jw_est < 0; Jw_est = 0; end
+        if Cm > 260
+            Cm = 260;
+            pi_m = pi_bulk * (260 / C);
+            NDP = P - pi_m;
+            if NDP < 0; NDP = 0; end
+            Jw = mem.A * NDP * 1e5;
+        end
 
-        Cm = C * exp(Jw_est / k_mt);
-
-        % Calculate Osmotic Pressure at Membrane Surface
-        % Scale pi linearly with C for the local point (pi_m / pi_b = Cm / Cb)
-        pi_m = pi_bulk * (Cm / C);
-
-        NDP = P - pi_m; % Net Driving Pressure
-        if NDP < 0; NDP = 0; end
-        Jw = mem.A * NDP * 1e5; % Water Flux (m/s)
-
-        % 3. Salt Flux Calculation (Js) [Source 2, Eq 2 & 8]
-        % Js = B * (Cm - Cp) and Cp = Js / Jw
-        % Solves to: Js = Cm * (B * Jw) / (Jw + B)
-        Js = Cm * (mem.B * Jw) / (Jw + mem.B); % Salt Flux (kg/m^2*s)
-
-        % 4. Friction / Pressure Drop [Source 2, Eq 13-14]
+        Js = Cm * (mem.B * Jw) / (Jw + mem.B);
         f = 0.42 + 189.3/(Re+0.1);
         dP = (f * props.rho * v^2 * dz) / (2 * geo.dh);
 
-        % 5. Nodal Mass Balance Update
-        % Water Permeated in this node
         Q_perm = Jw * geo.W * dz;
-
-        % Salt Permeated in this node (Mass = Flux * Area)
         M_salt_perm_node = Js * geo.W * dz;
 
-        % Update Axial Flows
         Q = Q - Q_perm;
-        if Q < 1e-6; Q = 1e-6; end % Prevent division by zero
+        if Q < 1e-6; Q = 1e-6; end
+        M_salt_flow = M_salt_flow - M_salt_perm_node;
 
-        M_salt_flow = M_salt_flow - M_salt_perm_node; % Subtract salt lost to permeate
-
-        % Update State Variables for next node
-        C = M_salt_flow / Q; % New Bulk Concentration
+        C = M_salt_flow / Q;
         P = P - dP/1e5;
 
-        % Accumulate totals for average permeate quality
         total_salt_perm_kg_s = total_salt_perm_kg_s + M_salt_perm_node;
         total_water_perm_m3_s = total_water_perm_m3_s + Q_perm;
     end
 
-    % Outputs
     vol_out = feed.Vol * (Q / (v_in * chan_area));
     C_out = C;
     P_out = P;
-
-    % Calculate Average Permeate Concentration (Cp)
     if total_water_perm_m3_s > 0
         Cp_bulk_avg = total_salt_perm_kg_s / total_water_perm_m3_s;
     else
         Cp_bulk_avg = 0;
     end
 end
-
-% =========================================================================
 
 function props = get_fluid_properties(C_gL, ~)
     rho = 1000 + 0.7*C_gL;
