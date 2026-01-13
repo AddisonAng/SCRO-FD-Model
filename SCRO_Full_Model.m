@@ -1,37 +1,37 @@
-function SCRO_Full_Model_v19()
+function SCRO_Full_Model()
 % =========================================================================
-% SCRO OPTIMIZATION MODEL v19 (OCTAVE COMPATIBLE)
+% SEMI-CLOSED REVERSE OSMOSIS (SCRO) OPTIMIZATION MODEL
 % =========================================================================
 
     clear variables; clc; close all;
 
     % --- 1. SYSTEM PARAMETERS ---
-    geo.L = 6.0;                 % length
-    geo.W = 35.0;                % width
-    geo.H = 0.7e-3;              % height
-    geo.epsilon = 0.85;
-    geo.dh = 4 * geo.epsilon * geo.H / (2 + 2*geo.epsilon);      % hydraulic diameter
-    geo.Area = geo.L * geo.W;    % cross sectional area
+    geo.L = 6.0;                     % Length [m]
+    geo.W = 35.0;                    % Width [m]
+    geo.H = 0.7e-3;                  % Channel height [m]
+    geo.epsilon = 0.85;              % Porosity
+    geo.dh = 4 * geo.epsilon * geo.H / (2 + 2*geo.epsilon);      % Hydraulic diameter
+    geo.Area = geo.L * geo.W;        % Membrane area
 
-    mem.A = 3.0e-12;             % ~1.1 LMH/bar
-    mem.B = 1.0e-7;              % Salt Permeability
+    mem.A = 3.0e-12;                 % Water Permeability (~1.1 LMH/bar)
+    mem.B = 1.0e-7;                  % Salt Permeability [m/s]
 
     % Efficiencies & Losses
-    sys.eff_pump = 0.80;         % Pump efficiency
-    sys.eff_erd  = 0.98;         % ERD efficiency
-    sys.dP_loss_circ = 0.5;      % Circulation penalty [bar]
+    sys.eff_pump = 0.80;             % High-pressure pump efficiency
+    sys.eff_erd  = 0.98;             % ERD efficiency
+    sys.dP_loss_circ = 0.5;          % Circulation pressure drop penalty [bar]
 
     % Feed Conditions
-    feed_init.C_gL = 35.0;       % Salt concentration in seawater
-    feed_init.Temp_K = 298.15;   % Temperature of 25C
-    feed_init.Vol = 10.0;
+    feed_init.C_gL = 35.0;           % Feed salinity [g/L]
+    feed_init.Temp_K = 298.15;       % Temperature [K]
+    feed_init.Vol = 10.0;            % Batch volume [m^3]
 
     % Osmotic Pressure
     props_f = get_fluid_properties(feed_init.C_gL, feed_init.Temp_K);
     Pi_feed_bar = props_f.osmotic_pressure_bar;
 
     % =========================================================================
-    % PHASE 1: EFFICIENCY ANALYSIS (N=1 to 6)
+    % PHASE 1: EFFICIENCY ANALYSIS (Variable Cycles)
     % =========================================================================
     fprintf('\n--- Phase 1: Efficiency Analysis (Fixed RR=0.60) ---\n');
     RR_fixed = 0.60;
@@ -57,9 +57,9 @@ function SCRO_Full_Model_v19()
     end
 
     % =========================================================================
-    % PHASE 2: RECOVERY SWEEP (N=1 to 6)
+    % PHASE 2: RECOVERY SWEEP
     % =========================================================================
-    fprintf('\n--- Phase 2: Recovery Sweep (Generating Graph 1 for N=1..6) ---\n');
+    fprintf('\n--- Phase 2: Recovery Sweep ---\n');
 
     RR_sweep = 0.30:0.05:0.85;
     N_selected = 1:6;
@@ -68,14 +68,14 @@ function SCRO_Full_Model_v19()
     results_p2.Ideal_Curve = zeros(length(RR_sweep), 1);
     results_p2.Model_Curves = nan(length(RR_sweep), length(N_selected));
 
-    % 1. Ideal Curve
+    % 1. Ideal Curve Calculation
     for j = 1:length(RR_sweep)
         rr = RR_sweep(j);
         val_ideal_J = (Pi_feed_bar * 1e5 / rr) * log(1 / (1 - rr));
         results_p2.Ideal_Curve(j) = val_ideal_J / 3.6e6;
     end
 
-    % 2. Model Curves
+    % 2. Model Simulation
     for k = 1:length(N_selected)
         N_curr = N_selected(k);
         fprintf('Simulating N=%d... ', N_curr);
@@ -87,21 +87,21 @@ function SCRO_Full_Model_v19()
     end
 
     % =========================================================================
-    % PLOTTING
+    % PLOTTING RESULTS
     % =========================================================================
 
-    % --- GRAPH 1: Theoretical Minimum vs Recovery Ratio ---
+    % --- GRAPH 1: SEC vs Recovery Ratio ---
     figure(1); clf; hold on; box on;
 
     legend_handles = [];
     legend_strings = {};
 
-    % Plot Ideal
+    % Plot Ideal Limit
     h_ideal = plot(results_p2.RR, results_p2.Ideal_Curve, '--k', 'LineWidth', 1);
     legend_handles(end+1) = h_ideal;
     legend_strings{end+1} = 'Thermodynamic Limit';
 
-    % Plot N=1 to N=6
+    % Plot Simulation Results
     colors = jet(length(N_selected));
     for k = 1:length(N_selected)
         valid = ~isnan(results_p2.Model_Curves(:, k));
@@ -110,7 +110,7 @@ function SCRO_Full_Model_v19()
             if N_selected(k) == 1
                 line_color = [1, 0, 0];         % Red for SSRO
             elseif N_selected(k) == 5
-                line_color = [0.85, 0.65, 0.1]; % Darker Gold for visibility
+                line_color = [0.85, 0.65, 0.1]; % Gold
             else
                 line_color = colors(k,:);
             end
@@ -130,11 +130,11 @@ function SCRO_Full_Model_v19()
 
     xlabel('Water Recovery Ratio (RR)');
     ylabel('Specific Energy Consumption (kWh/m^3)');
-    title('SEC vs. Recovery Ratio (N=1 to 6)');
+    title('SEC vs. Recovery Ratio');
     legend(legend_handles, legend_strings, 'Location', 'NorthWest', 'NumColumns', 2);
     grid on;
 
-    % Axes Limits and Ticks
+    % Axes Formatting
     ylim([0.0, 6.0]);
     xlim([0.3, 0.8]);
     xticks(0.3:0.05:0.8);
@@ -154,7 +154,7 @@ function SCRO_Full_Model_v19()
 
     xlabel('Number of Cycles (N)');
     ylabel('Specific Energy Consumption (kWh/m^3)');
-    title(sprintf('SEC vs No.of cycles (RR=%.2f)', RR_fixed));
+    title(sprintf('SEC vs Number of Cycles (RR=%.2f)', RR_fixed));
     legend([h_sec, h_min], {'SCRO SEC', 'Optimal Point'}, 'Location', 'NorthEast');
     grid on;
     xticks(results_p1.N);
@@ -181,7 +181,7 @@ function SCRO_Full_Model_v19()
 end
 
 % =========================================================================
-% Iterative Functions
+% Helper Functions
 % =========================================================================
 
 function SEC = run_scro_batch(N, RR_target, feed_initial, geo, mem, sys)
